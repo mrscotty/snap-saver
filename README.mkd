@@ -1,0 +1,109 @@
+# Snap-Saver - Pristine System Rollback
+
+Warning: This is a semi-wicked hack for a very specific usage. YMMV.
+
+The goal is to be able to easily revert back to a pristine system
+state for running fresh development deployments in an environment 
+where there is limited console access and no other quick provisioning
+process is feasible.
+
+The solution should fulfill the following requirements:
+
+* reliable revert back to the pristine state
+* simple to implement, configure and maintain
+* automatically revert to pristine state on reboot
+* easy fallback to disable filesystem overlay
+
+Possible methods:
+
+* LVM Snapshots
+* UnionFS (AuFS)
+
+After some research work, using LVM snapshots was chosen for one simple
+reason: it's available on our target systems out-of-the-box.
+
+# LVM Snapshots
+
+## Overview
+
+On system boot (e.g. in the initrd), run the 
+following steps:
+
+* call the wrapper script in initrd
+* call actual script in the config LV
+* delete existing snapshot LVs
+* create new snapshot LVs
+
+## Configuration / Control Files
+
+### Configuration FS
+
+The configuration is located in its own LV, rootvg/snap\_saver\_lv.
+At runtime, this is mounted to /snap\_saver/.
+
+### /snap\_saver/snap\_saver.rc
+
+This configuration file contains details on the LVs to be preserved.
+
+    snap_saver_lv_list="rootvg:root_lv:1G rootvg:usr_lv:1G"
+
+### /snap\_saver/snap\_saver\_enabled
+
+If this file exists, the snap-saver script creates the snapshots
+and renames the LVs so that the snapshots will be used instead
+of the original LVs.
+
+During normal operations, this file should exist.
+
+### /snap\_saver/snap\_saver\_norefresh
+
+If this file exists, the existing snapshots are not deleted.
+
+During normal operations, this file should not exist.
+
+Note: this file is automatically deleted by the snap-saver.sh
+when found. It must be re-created before each reboot where the
+snapshot reset should be skipped.
+
+## Implementation Notes
+
+* By default, deletes the existing snapshots, re-creates new
+  snapshots and mounts the snapshots instead of the original LVs
+* Debug output from boot/80-snap-saver.sh is available in
+  /var/log/boot.omsg
+* The /boot filesystem type 'ext2' is not supported at boot in the
+  initrd image
+
+### Scenario 1 - Normal Operations
+
+The normal mode of operation is set by the following:
+
+    sudo /sbin/lvcreate --size 1M -n snap_saver_enabled_lv rootvg
+    sudo /sbin/reboot
+
+On reboot, the snap-saver.sh script will delete the existing snapshots,
+if found, create new snapshots and rename the LV names so the snapshots
+show up in the place of the originals (e.g. root\_lv\_orig and root\_lv).
+
+The result: at each reboot, the system is returned to the pristine 
+state.
+
+### Scenario 2 - Reboot of Test Without Snapshot Reset
+
+If a test must continue after a reboot, the snap-saver.sh needs to
+know that it should *not* reset the snapshot to the pristine state.
+
+Skipping the reset is triggered by the following:
+
+    /sbin/snap-adm.sh norefresh
+
+The snap-saver.sh will remove this file as a safety feature to 
+allow for a reset in the event that the reboot prevents the
+system from booting properly.
+
+
+
+
+
+
+
