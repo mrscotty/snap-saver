@@ -36,14 +36,14 @@ $(L_DIR):
 #$(L_DIR)/boot/80-snap-saver.sh: $(L_DIR)/scripts/snap-saver.sh
 #	(cd $(L_DIR)/boot && ln -s -f ../scripts/snap-saver.sh 80-snap-saver.sh)
 
-$(L_DIR)/boot/80-boot-snap-saver.sh: boot-snap-saver.sh $(L_DIR)
-	install -T $< $@
+#$(L_DIR)/boot/80-boot-snap-saver.sh: boot-snap-saver.sh $(L_DIR)
+#	install -T $< $@
 
-/sbin/snap-adm.sh: files/sbin/snap-adm.sh
+/sbin/snap-adm.sh: snap-adm.sh
 	sudo install -T $< $@
 
-initrd-snap-saver: $(L_DIR)/boot/80-snap-saver.sh 
-	sudo /sbin/mkinitrd -l $(HOME)/lib-mkinitrd 
+#initrd-snap-saver: $(L_DIR)/boot/80-boot-snap-saver.sh 
+#	sudo /sbin/mkinitrd -l $(HOME)/lib-mkinitrd 
 
 DEMO_FILES := /root-fs.demo /usr/usr-fs.demo /var/var-fs.demo /home/home-fs.demo
 

@@ -1,16 +1,69 @@
 #!/bin/bash
 #
+# snap-adm.sh - A wicked method of using LVM snapshots for clean tests
+#
+# The goal of this script is to be able to easily revert back to a
+# pristine system state for running fresh development deployments in an
+# environment where there is limited console access and no other quick
+# provisioning process is feasible.
 # 
+# USAGE:
+#
+# /sbin/snap-adm.sh COMMAND
+#
+# COMMANDS:
+#
+#   init
+#           Initialize the boot loader (initrd image), control
+#           LV and configuration file. This MUST be run after 
+#           copying this script to a fresh system.
+#
+#   enable
+#
+#           Enables the snapshot mirroring to be done on next boot
+#
+#   disable
+#
+#           Disables the snapshot mirroring so it will not be done
+#           at next boot. [Default]
+#
+#   refresh
+#
+#           Toggle 'refresh' configuration stanza so that existing
+#           snapshots will be discarded at system boot. [Default]
+#
+#   norefresh
+#
+#           Toggle 'refresh' configuration stanza so that existing
+#           snapshots will NOT be discarded at system boot. On boot,
+#           the toggle will automatically be reset to 'refresh'.
+#
+#   pristine
+#
+#           Attempt to revert LV names back to pristine state so that
+#           the system boots from the original LVs.
+#
+#   start
+#
+#           Run by the boot-snap-server.sh during system init to create
+#           the snapshot LVs and rename the original LVs so the system
+#           mounts the snapshots. This should NOT be run when the final
+#           filesystems are mounted.
+#
+#   status
+#
+#           Show status of snapshots
+
 
 # Add some stuff to path, just in case
 PATH="$PATH:/sbin:/bin:/usr/bin"
 
 snap_saver_lv=rootvg/snap_saver_lv
-snap_saver_mt=/snap_saver
-snap_saver_rc=${snap_saver_mt}/snap_saver.rc
+snap_saver_mt=/snap-saver
+snap_saver_rc=${snap_saver_mt}/snap-saver.rc
 
-snap_saver_enabled_file=${snap_saver_mt}/snap_saver_enabled
-snap_saver_norefresh_file=${snap_saver_mt}/snap_saver_norefresh
+snap_saver_enabled_file=${snap_saver_mt}/snap-saver-enabled
+snap_saver_norefresh_file=${snap_saver_mt}/snap-saver-norefresh
 
 vg_name=rootvg
 enabled_lv=snap_saver_enabled_lv
@@ -24,21 +77,21 @@ die() {
 }
 
 mount_cfg() {
-    if [ ! -d /snap_saver ]; then
-        sudo mkdir -p /snap_saver || die "Error creating dir /snap_saver"
+    if [ ! -d "$snap_saver_mt" ]; then
+        sudo mkdir -p "$snap_saver_mt" || die "Error creating dir $snap_saver_mt"
     fi
-    if mount | grep -q " on /snap_saver "; then
+    if mount | grep -q " on $snap_saver_mt "; then
         true    # no-op
-        # echo "/snap_saver already mounted" 1>&2
+        # echo "$snap_saver_mt already mounted" 1>&2
     else
-        sudo mount -t ext3 /dev/$snap_saver_lv /snap_saver \
-            || die "Error mounting /dev/$snap_saver_lv"
+        sudo mount -t ext3 /dev/$snap_saver_lv $snap_saver_mt \
+            || eie "Error mounting /dev/$snap_saver_lv"
     fi
 }
 
 umount_cfg() {
-    sudo umount /snap_saver \
-        || die "Error un-mounting /snap_saver"
+    sudo umount $snap_saver_mt \
+        || die "Error un-mounting $snap_saver_mt"
 }
 
 do_init() {
@@ -74,13 +127,23 @@ do_init() {
             echo '"' | sudo tee -a $snap_saver_rc >/dev/null
 
             echo "WARNING -- YOU MUST EDIT $snap_saver_rc !!!" 1>&2
-            vi $snap_saver_rc
         fi
+        
+        if [ ! -f $snap_saver_mt/snap-adm.sh ]; then
+            echo "copying snap_adm to $snap_saver_mt/ ..."
+            sudo install $0 $snap_saver_mt/
+        fi
+        mkdir -p ~/mkinitrd-$$
+        (cd /lib/mkinitrd && tar -cf - . | tar xf - -C ~/mkinitrd-$$) || \
+            die "Failed to copy /lib/mkinitrd to ~/mkinitrd-$$"
+        cp /sbin/boot-snap-saver.sh ~/mkinitrd-$$/boot/80-boot-snap-saver.sh
+        sudo /sbin/mkinitrd -l ~/mkinitrd-$$
 }
 
 do_enable() {
     mount_cfg
     sudo touch $snap_saver_enabled_file
+    echo "snap-saver is ENABLED and will run at next reboot"
 }
 
 do_disable() {
@@ -201,6 +264,13 @@ start_snap_saver() {
 
 do_start() {
     # If we get here, /snap_saver is already mounted
+
+    if grep -q ' / ' /etc/mtab; then
+        echo "$0 - 'start' may only be run at system boot" 1>&2
+        exit 1
+    fi
+
+
 
     if [ -f "$snap_saver_enabled_file" ]; then
         echo "$0 - ENABLED" 1>&2

@@ -5,7 +5,9 @@
 #
 # Note: the 'programs' attribute must contain *all* commands needed by snap-adm.sh
 #
-#%programs: /sbin/lvdisplay /sbin/lvremove /sbin/lvcreate /sbin/lvrename /sbin/lvscan /sbin/lvs /bin/mount /bin/umount /usr/bin/awk
+# Note 2: *never* call 'exit' in this script!!! It will cause a kernel panic!!!
+#
+#%programs: /sbin/lvdisplay /sbin/lvremove /sbin/lvcreate /sbin/lvrename /sbin/lvscan /sbin/lvs /bin/mount /bin/umount /usr/bin/awk /bin/test /bin/ls
 #%if: ! "$root_already_mounted"
 #%dontshow
 #
@@ -21,7 +23,7 @@
 ## ro           mount the root device read-only
 ## 
 #
-# In the $snap_saver_lv, there should be the file snap_saver.rc
+# In the $snap_saver_lv, there should be the file snap-saver.rc
 # that contains the following variable:
 #
 # snap_saver_lv_list="\
@@ -34,19 +36,18 @@
 
 # CONFIG VARS
 snap_saver_lv=rootvg/snap_saver_lv
-snap_saver_mt=/snap_saver
-snap_saver_rc=/snap_saver/snap_saver.rc
-snap_saver_sh=/snap_saver/snap_saver.sh
+snap_saver_mt=/snap-saver
+snap_saver_rc=/snap-saver/snap-saver.rc
+snap_saver_sh=/snap-saver/snap-adm.sh
 
-snap_saver_enabled_file=${snap_saver_mt}/snap_saver_enabled
-snap_saver_norefresh_file=${snap_saver_mt}/snap_saver_norefresh
-
-ls -l /setup/*snap*.sh
+snap_saver_enabled_file=${snap_saver_mt}/snap-saver-enabled
+snap_saver_norefresh_file=${snap_saver_mt}/snap-saver-norefresh
 
 # die "message text"
+# IMPORTANT: don't use 'exit' or you'll get a kernel panic!!!
 die() {
     echo $* 1>&2
-    exit 1
+    return 1
 }
 
 # snap_saver_check() - check whether we should run
@@ -63,10 +64,14 @@ snap_saver() {
         mkdir -p $snap_saver_mt
         mount -t ext3 "/dev/$snap_saver_lv" "$snap_saver_mt" \
             || die "Error mounting $snap_saver_mt"
-        if [ ! -x "$snap_saver_sh" ]; then
+        ls -latr $snap_saver_mt
+        if test -x "$snap_saver_sh" ; then
+            echo "found $snap_saver_sh - executing it"
+            $snap_saver_sh start
+        else
+            echo "missing $snap_saver_sh"
             die "$snap_saver_sh does not exist or is not executable"
         fi
-        $snap_saver_sh start
 
         umount $snap_saver_mt
     else
@@ -83,8 +88,9 @@ bar
 
 # And now for the real thing
 snap_saver
+ret=$?
 
 bar
 
-return 0
+return $ret
 

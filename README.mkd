@@ -70,7 +70,7 @@ snapshot reset should be skipped.
 * By default, deletes the existing snapshots, re-creates new
   snapshots and mounts the snapshots instead of the original LVs
 * Debug output from boot/80-snap-saver.sh is available in
-  /var/log/boot.omsg
+  /var/log/boot.msg
 * The /boot filesystem type 'ext2' is not supported at boot in the
   initrd image
 
