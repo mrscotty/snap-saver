@@ -7,10 +7,9 @@
 #
 # My workflow looks similar to the following:
 #
-#	# (edit stuff in ~/git/snap-saver and then commit it to git)
-#	# Re-create the vagrant instance, install the initrd image,
+#	# Create the vagrant instance, install the initrd image,
 #	# reboot with snap-saver installed (status should then be NOT ENABLED)
-#	./vag.mk fdestroy clean all vag-restart snap-status
+#	./vag.mk all vag-restart snap-status
 #
 #	# Enable snap-saver, reboot, and check status (output shows LVs are
 #	# snapshots of original LVs)
@@ -32,6 +31,10 @@
 #	# should automatically be removed and a subsequent reboot 
 #	# should cause the demo files to disappear
 #	./vag.mk vag-restart demo-status
+#
+#	# If you need to start over with a new Vagrant instance, just
+#	# run the following:
+#	./vag.mk destroy clean
 #
 #
 
