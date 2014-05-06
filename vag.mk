@@ -13,7 +13,7 @@
 #
 #	# Enable snap-saver, reboot, and check status (output shows LVs are
 #	# snapshots of original LVs)
-#	./vag.mk snap-enable vag-restart
+#	./vag.mk snap-enable vag-restart snap-status
 #
 #	# Create some demo files 
 #	./vag.mk demo demo-status
