@@ -20,28 +20,14 @@
 ## Command line parameters
 ## -----------------------
 ##
-## ro           mount the root device read-only
 ## 
-#
-# In the $snap_saver_lv, there should be the file snap-saver.rc
-# that contains the following variable:
-#
-# snap_saver_lv_list="\
-#    rootvg:root_lv:/:2G \
-#    rootvg:home_lv:/home:500M \
-#    rootvg:usr_lv:/usr:1500M \
-#    rootvg:var_lv:/var:500M"
 #
 
 
 # CONFIG VARS
 snap_saver_lv=rootvg/snap_saver_lv
 snap_saver_mt=/snap-saver
-snap_saver_rc=/snap-saver/snap-saver.rc
 snap_saver_sh=/snap-saver/snap-adm.sh
-
-snap_saver_enabled_file=${snap_saver_mt}/snap-saver-enabled
-snap_saver_norefresh_file=${snap_saver_mt}/snap-saver-norefresh
 
 # die "message text"
 # IMPORTANT: don't use 'exit' or you'll get a kernel panic!!!
