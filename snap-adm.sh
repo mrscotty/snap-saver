@@ -25,7 +25,14 @@
 #   disable
 #
 #           Disables the snapshot mirroring so it will not be done
-#           at next boot. [Default]
+#           at next boot. If snapshots are currently enabled, they
+#           will be deleted at next reboot and the original LVs
+#           will be used.
+#
+#   ignore
+#
+#           At reboot, ignore all snap-saver actions and leave
+#           everything as-is. [Default]
 #
 #   refresh
 #
@@ -37,11 +44,6 @@
 #           Toggle 'refresh' configuration stanza so that existing
 #           snapshots will NOT be discarded at system boot. On boot,
 #           the toggle will automatically be reset to 'refresh'.
-#
-#   pristine
-#
-#           Attempt to revert LV names back to pristine state so that
-#           the system boots from the original LVs.
 #
 #   start
 #
@@ -63,11 +65,18 @@ snap_saver_mt=/snap-saver
 snap_saver_rc=${snap_saver_mt}/snap-saver.rc
 
 snap_saver_enabled_file=${snap_saver_mt}/snap-saver-enabled
+snap_saver_disabled_file=${snap_saver_mt}/snap-saver-disabled
 snap_saver_norefresh_file=${snap_saver_mt}/snap-saver-norefresh
 
 vg_name=rootvg
 enabled_lv=snap_saver_enabled_lv
 norefresh_lv=snap_saver_norefresh_lv
+
+if [ -x /usr/bin/sudo ]; then
+    SUDO=/usr/bin/sudo
+else
+    SUDO=
+fi
 
 cmd="$1"
 
@@ -78,91 +87,104 @@ die() {
 
 mount_cfg() {
     if [ ! -d "$snap_saver_mt" ]; then
-        sudo mkdir -p "$snap_saver_mt" || die "Error creating dir $snap_saver_mt"
+        $SUDO mkdir -p "$snap_saver_mt" || die "Error creating dir $snap_saver_mt"
     fi
     if mount | grep -q " on $snap_saver_mt "; then
         true    # no-op
         # echo "$snap_saver_mt already mounted" 1>&2
     else
-        sudo mount -t ext3 /dev/$snap_saver_lv $snap_saver_mt \
+        $SUDO mount -t ext3 /dev/$snap_saver_lv $snap_saver_mt \
             || eie "Error mounting /dev/$snap_saver_lv"
     fi
 }
 
 umount_cfg() {
-    sudo umount $snap_saver_mt \
+    $SUDO umount $snap_saver_mt \
         || die "Error un-mounting $snap_saver_mt"
 }
 
 do_init() {
-        if sudo lvdisplay $snap_saver_lv >/dev/null 2>&1 ; then
+        if $SUDO lvdisplay $snap_saver_lv >/dev/null 2>&1 ; then
             echo "$0: LV $snap_saver_lv exists"
         else
             echo "$0: creating LV $snap_saver_lv..."
             vg_name=`echo $snap_saver_lv | awk -F/ '{print $1}'`
             lv_name=`echo $snap_saver_lv | awk -F/ '{print $2}'`
 
-            sudo lvcreate --size 1M -n $lv_name $vg_name \
+            $SUDO lvcreate --size 1M -n $lv_name $vg_name \
                 || die "Error creating LV $lv_name in VG $vg_name"
-            sudo mkfs.ext3 -m 0 /dev/$vg_name/$lv_name
+            $SUDO mkfs.ext3 -m 0 /dev/$vg_name/$lv_name
         fi
         mount_cfg
         if [ ! -f $snap_saver_rc ]; then
             echo "Creating initial $snap_saver_rc" 1>&2
-            lvs=`sudo lvs --noheadings --separator : -o vg_name,lv_name,lv_size \
+            lvs=`$SUDO lvs --noheadings --separator : -o vg_name,lv_name,lv_size \
                 | egrep -v ':[^:]*(swap|snap_saver)[^:]*:' \
                 | egrep -v ':[^:]*_(snap|orig)[^:]*:'`
-            echo "# $snap_saver_rc" | sudo tee $snap_saver_rc >/dev/null
-            echo "#" | sudo tee -a $snap_saver_rc >/dev/null
+            echo "# $snap_saver_rc" | $SUDO tee $snap_saver_rc >/dev/null
+            echo "#" | $SUDO tee -a $snap_saver_rc >/dev/null
             echo "# Configuration for the snap-saver script" \
-                | sudo tee -a $snap_saver_rc >/dev/null
-            echo | sudo tee -a $snap_saver_rc >/dev/null
+                | $SUDO tee -a $snap_saver_rc >/dev/null
+            echo | $SUDO tee -a $snap_saver_rc >/dev/null
             echo "# snap_saver_lv_list contains the LVs to be handled by snap-saver." \
-                | sudo tee -a $snap_saver_rc >/dev/null
+                | $SUDO tee -a $snap_saver_rc >/dev/null
             echo 'snap_saver_lv_list="\' \
-                | sudo tee -a $snap_saver_rc >/dev/null
+                | $SUDO tee -a $snap_saver_rc >/dev/null
             for i in $lvs; do
-                echo "$i \\" | sudo tee -a $snap_saver_rc >/dev/null
+                echo "$i \\" | $SUDO tee -a $snap_saver_rc >/dev/null
             done
-            echo '"' | sudo tee -a $snap_saver_rc >/dev/null
+            echo '"' | $SUDO tee -a $snap_saver_rc >/dev/null
 
             echo "WARNING -- YOU MUST EDIT $snap_saver_rc !!!" 1>&2
         fi
         
         if [ ! -f $snap_saver_mt/snap-adm.sh ]; then
             echo "copying snap_adm to $snap_saver_mt/ ..."
-            sudo install $0 $snap_saver_mt/
+            $SUDO install $0 $snap_saver_mt/
         fi
         mkdir -p ~/mkinitrd-$$
         (cd /lib/mkinitrd && tar -cf - . | tar xf - -C ~/mkinitrd-$$) || \
             die "Failed to copy /lib/mkinitrd to ~/mkinitrd-$$"
         cp /sbin/boot-snap-saver.sh ~/mkinitrd-$$/boot/80-boot-snap-saver.sh
-        sudo /sbin/mkinitrd -l ~/mkinitrd-$$
+        $SUDO /sbin/mkinitrd -l ~/mkinitrd-$$
 }
 
-do_enable() {
+set_enable() {
     mount_cfg
-    sudo touch $snap_saver_enabled_file
+    $SUDO rm -f $snap_saver_disabled_file
+    $SUDO touch $snap_saver_enabled_file
     echo "snap-saver is ENABLED and will run at next reboot"
 }
 
-do_disable() {
+set_disable() {
     mount_cfg
-    sudo rm -f $snap_saver_enabled_file
+    $SUDO rm -f $snap_saver_enabled_file
+    $SUDO touch $snap_saver_disabled_file
+    echo "snap-saver is DISABLED and any snapshots will be removed at next boot"
 }
 
-do_refresh() {
+set_ignore() {
     mount_cfg
-    sudo rm -f $snap_saver_norefresh_file
+    $SUDO rm -f $snap_saver_enabled_file $snap_saver_disabled_file
+    echo "snap-saver will be IGNORED at next boot"
 }
 
-do_norefresh() {
+set_refresh() {
     mount_cfg
-    sudo touch $snap_saver_norefresh_file
+    $SUDO rm -f $snap_saver_norefresh_file
 }
 
-do_pristine() {
-        for entry in `sudo lvs --noheadings --separator : -o lv_name,origin`; do
+set_norefresh() {
+    mount_cfg
+    $SUDO touch $snap_saver_norefresh_file
+}
+
+stop_snap_saver() {
+    echo "Stopping snap-saver (re-activating original LVs)"
+    echo "Mounted filesystems:"
+    mount
+    echo ""
+    for entry in `lvs --noheadings --separator : -o lv_name,origin`; do
             lv_name=`echo $entry | awk -F: '{print $1}'`
             lv_orig=`echo $entry | awk -F: '{print $2}'`
             if [ -n "$lv_orig" ]; then
@@ -172,14 +194,16 @@ do_pristine() {
                     if [[ "$lv_name" =~ "_snap" ]]; then
                         echo "ERR - $lv_name already ends with '_snap'"
                     else
-                        sudo lvrename $vg_name/$lv_name $vg_name/${lv_name}_snap
-                        sudo lvrename $vg_name/${lv_orig} $vg_name/${lv_name}
+                        echo "Renaming $lv_name to ${lv_name}_snap..."
+                        lvrename --noudevsync $vg_name/$lv_name $vg_name/${lv_name}_snap
+                        echo "Renaming $lv_orig to ${lv_name}..."
+                        lvrename --noudevsync $vg_name/${lv_orig} $vg_name/${lv_name}
                     fi
                 else
                     echo "Original LV $lv_orig does not end in '_orig'"
                 fi
             fi
-        done
+    done
 }
 
 start_snap_saver() {
@@ -263,14 +287,12 @@ start_snap_saver() {
 }
 
 do_start() {
-    # If we get here, /snap_saver is already mounted
+    # Note: If we get here, /snap_saver is already mounted
 
     if grep -q ' / ' /etc/mtab; then
         echo "$0 - 'start' may only be run at system boot" 1>&2
         exit 1
     fi
-
-
 
     if [ -f "$snap_saver_enabled_file" ]; then
         echo "$0 - ENABLED" 1>&2
@@ -281,7 +303,12 @@ do_start() {
             start_snap_saver
         fi
     else
-        echo "$0 - NOT ENABLED" 1>&2
+        if [ -f "$snap_saver_disabled_file" ]; then
+            stop_snap_saver
+        else
+            echo "$0 - NOT ENABLED" 1>&2
+        fi
+
     fi
 }
 
@@ -298,7 +325,7 @@ do_status() {
    else
         echo "$0 - NOT ENABLED"
    fi
-   for entry in `sudo lvs --noheadings --separator : -o lv_name,origin`; do
+   for entry in `$SUDO lvs --noheadings --separator : -o lv_name,origin`; do
         lv_name=`echo $entry | awk -F: '{print $1}'`
         lv_orig=`echo $entry | awk -F: '{print $2}'`
         if [ -n "$lv_orig" ]; then
@@ -312,20 +339,23 @@ case "$1" in
         do_init
         ;;
     enable)
-        do_enable
+        set_enable
         ;;
     disable)
-        do_disable
+        set_disable
+        ;;
+    ignore)
+        set_ignore
         ;;
     refresh)
-        do_refresh
+        set_refresh
         ;;
     norefresh)
-        do_norefresh
+        set_norefresh
         ;;
-    pristine)
-        do_pristine
-        ;;
+#    pristine)
+#        do_pristine
+#        ;;
     start)
         do_start
         ;;
