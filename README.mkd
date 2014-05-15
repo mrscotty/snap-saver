@@ -14,13 +14,9 @@ The solution should fulfill the following requirements:
 * automatically revert to pristine state on reboot
 * easy fallback to disable filesystem overlay
 
-Possible methods:
-
-* LVM Snapshots
-* UnionFS (AuFS)
-
-After some research work, using LVM snapshots was chosen for one simple
-reason: it's available on our target systems out-of-the-box.
+After some research work (we looked heavily at UnionFS/AuFS), using LVM
+snapshots was chosen for one simple reason:
+It's available on our target systems out-of-the-box.
 
 # LVM Snapshots
 
@@ -33,21 +29,22 @@ following steps:
 * call actual script in the config LV
 * delete existing snapshot LVs
 * create new snapshot LVs
+* let the system continue booting using the snapshots
 
 ## Configuration / Control Files
 
 ### Configuration FS
 
 The configuration is located in its own LV, rootvg/snap\_saver\_lv.
-At runtime, this is mounted to /snap\_saver/.
+At runtime, this is mounted to /snap-saver/.
 
-### /snap\_saver/snap\_saver.rc
+### /snap-saver/snap-saver.rc
 
 This configuration file contains details on the LVs to be preserved.
 
     snap_saver_lv_list="rootvg:root_lv:1G rootvg:usr_lv:1G"
 
-### /snap\_saver/snap\_saver\_enabled
+### /snap-saver/snap-saver-enabled
 
 If this file exists, the snap-saver script creates the snapshots
 and renames the LVs so that the snapshots will be used instead
@@ -55,7 +52,14 @@ of the original LVs.
 
 During normal operations, this file should exist.
 
-### /snap\_saver/snap\_saver\_norefresh
+### /snap-saver/snap-saver-disabled
+
+If this file exists, the snap-saver script renames the LVs so 
+that the original LVs are back in their original names.
+
+During normal operations, this file should not exist.
+
+### /snap-saver/snap-saver-norefresh
 
 If this file exists, the existing snapshots are not deleted.
 
@@ -72,16 +76,30 @@ snapshot reset should be skipped.
 * Debug output from boot/80-snap-saver.sh is available in
   /var/log/boot.msg
 * The /boot filesystem type 'ext2' is not supported at boot in the
-  initrd image
+  initrd image (this is why the config is in a separate LV).
 
-### Scenario 1 - Normal Operations
+### Installation
+
+Installation is very simple--just copy the two scripts to /sbin. Use
+the helper script to do this for you:
+
+    sudo ./install.sh
+
+### Initialization
+
+Once installed, the initrd image in /boot must be re-written and the
+configuration LV must be created:
+
+    /sbin/snap-adm.sh init
+
+### Scenario 1 - Normal Operations -- Snap-Saver Enabled
 
 The normal mode of operation is set by the following:
 
-    sudo /sbin/lvcreate --size 1M -n snap_saver_enabled_lv rootvg
+    /sbin/snap-adm.sh enable
     sudo /sbin/reboot
 
-On reboot, the snap-saver.sh script will delete the existing snapshots,
+On reboot, the snap-saver script will delete the existing snapshots,
 if found, create new snapshots and rename the LV names so the snapshots
 show up in the place of the originals (e.g. root\_lv\_orig and root\_lv).
 
@@ -90,20 +108,28 @@ state.
 
 ### Scenario 2 - Reboot of Test Without Snapshot Reset
 
-If a test must continue after a reboot, the snap-saver.sh needs to
+If a test must continue after a reboot, the snap-saver needs to
 know that it should *not* reset the snapshot to the pristine state.
 
 Skipping the reset is triggered by the following:
 
     /sbin/snap-adm.sh norefresh
 
-The snap-saver.sh will remove this file as a safety feature to 
+The snap-saver will remove this file as a safety feature to 
 allow for a reset in the event that the reboot prevents the
 system from booting properly.
 
+### Scenario 3 - Boot without Snap-Saver
 
+In order to apply system updates (e.g. OS patches) to the pristine
+system, the snap-saver must be disabled and the original LVs must
+be renamed back to their original names. To do this:
 
+    /sbin/snap-adm.sh disable
+    sudo /sbin/reboot
 
+## Testing
 
-
+To test with vagrant, take a look at the vag.mk and Makefile files for two
+options.
 
