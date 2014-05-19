@@ -29,3 +29,12 @@ $(VAG_DIR)/.vagrant/machines/%/$(VAG_PROVIDER)/id:
 
 test: $(SNAP_TARBALL) default.sshcfg
 	prove -Ilib t/*.t
+
+.PHONY: update
+update: $(SNAP_TARBALL) default.sshcfg
+	ssh -F default.sshcfg default \
+		"mkdir -p snap-pkg && cd snap-pkg && \
+		tar -xzf /vagrant/snap-saver.tgz && ./install.sh"
+
+clean:
+	rm default.sshcfg
