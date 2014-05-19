@@ -29,6 +29,12 @@
 #           will be deleted at next reboot and the original LVs
 #           will be used.
 #
+#   cleanup
+#
+#           Remove snapshot LVs. Note: this only works if they have
+#           the suffix '_snapshot' and the original LVs exist, which
+#           happens after using the 'disable' command and re-booting.
+#
 #   ignore
 #
 #           At reboot, ignore all snap-saver actions and leave
@@ -206,6 +212,40 @@ stop_snap_saver() {
     done
 }
 
+do_cleanup() {
+    # Here's the logic:
+    #
+    # For each entry in the LV list that was configured, 
+    # 
+    # If both <lv_name> and <lv_name>_snap exist, delete
+    # the <lv_name>_snap since it should be the snapshot LV.
+
+    local vg_name lv_name lv_size lv_dev 
+
+    mount_cfg
+    . "$snap_saver_rc"
+    echo "DEBUG: snap_saver_lv_list=$snap_saver_lv_list"
+    for lv_entry in $snap_saver_lv_list; do
+        # vars
+        vg_name=`echo $lv_entry | awk -F: '{print $1}'`
+        lv_name=`echo $lv_entry | awk -F: '{print $2}'`
+        lv_size=`echo $lv_entry | awk -F: '{print $3}'`
+        #lv_dev=/dev/$vg_name/$lv_name
+
+        if $SUDO lvdisplay $vg_name/${lv_name}_snap >/dev/null 2>&1; then
+            echo "$0 - found snapshot volume ${lv_name}_snap" 1>&2
+            if $SUDO lvdisplay $vg_name/${lv_name} >/dev/null 2>&1; then
+                echo "$0 - removing ${lv_name}_snap..." 1>&2
+                $SUDO lvremove -f $vg_name/${lv_name}_snap
+            else
+                echo "ERR - original LV of ${lv_name}_snap not found - skip" 1>&2
+            fi
+        else
+            "$0 - no snapshot found for $vg_name/$lv_name"
+        fi
+    done
+}
+
 start_snap_saver() {
     local vg_name lv_name lv_size lv_dev 
 
@@ -353,9 +393,9 @@ case "$1" in
     norefresh)
         set_norefresh
         ;;
-#    pristine)
-#        do_pristine
-#        ;;
+    cleanup)
+        do_cleanup
+        ;;
     start)
         do_start
         ;;
