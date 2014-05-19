@@ -11,7 +11,7 @@ use Vagrant;
 my $state = Vagrant::state();
 my $rc;
 
-is($state, 'not created', "initial state");
+like($state, qr/^(not created|running)$/, "initial state");
 
 Vagrant::up();
 

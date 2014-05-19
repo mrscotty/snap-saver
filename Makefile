@@ -7,15 +7,24 @@
 
 ifdef VAGRANT_CWD
 	SNAP_TARBALL = $(VAGRANT_CWD)/snap-saver.tgz
+	VAG_DIR = $(VAGRANT_CWD)
 else
 	SNAP_TARBALL = snap-saver.tgz
+	VAG_DIR = .
 endif
+
+VAG_PROVIDER = virtualbox
 
 $(SNAP_TARBALL): snap-adm.sh boot-snap-saver.sh install.sh
 	tar -czf $@ $^
 
-default.sshcfg:
-	vagrant ssh-config default > $@.tmp
+.PRECIOUS: $(VAG_DIR)/.vagrant/machines/%/$(VAG_PROVIDER)/id
+
+$(VAG_DIR)/.vagrant/machines/%/$(VAG_PROVIDER)/id:
+	cd $(VAG_DIR) && vagrant up $*
+
+%.sshcfg: $(VAG_DIR)/.vagrant/machines/%/$(VAG_PROVIDER)/id
+	vagrant ssh-config $* > $@.tmp
 	mv $@.tmp $@
 
 test: $(SNAP_TARBALL) default.sshcfg
