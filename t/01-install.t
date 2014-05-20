@@ -35,12 +35,4 @@ is(Vagrant::state(), 'running', "after starting vagrant instance");
 like(Vagrant::backtick("/sbin/snap-adm.sh status"), qr/NOT ENABLED/, 
     "installed, but not enabled");
 
-# Clean up snapshot LVs
-like(Vagrant::backtick("/sbin/snap-adm.sh status"), qr/_snap is snapshot of /, 
-    "previous, inactive snapshots still exist");
-$rc = Vagrant::sshcmd("/sbin/snap-adm.sh cleanup");
-is($rc, 0, "Results of snap-saver cleanup");
-unlike(Vagrant::backtick("/sbin/snap-adm.sh status"), qr/_snap is snapshot of /, 
-    "previous, inactive snapshots still exist after cleanup");
-
 done_testing();
