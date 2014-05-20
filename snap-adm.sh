@@ -78,10 +78,10 @@ vg_name=rootvg
 enabled_lv=snap_saver_enabled_lv
 norefresh_lv=snap_saver_norefresh_lv
 
-if [ -x /usr/bin/sudo ]; then
-    SUDO=/usr/bin/sudo
-else
+if [ "$EUID" = "0" ]; then
     SUDO=
+else
+    SUDO=/usr/bin/sudo
 fi
 
 cmd="$1"

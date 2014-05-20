@@ -17,11 +17,11 @@ my @demo_files =
 
 sub snapadm {
     my $cmd = shift;
-    return Vagrant::sshcmd("/sbin/snap-adm.sh $cmd");
+    return Vagrant::sshcmd("sudo /sbin/snap-adm.sh $cmd");
 }
 
 sub snapstatus {
-    return Vagrant::backtick("/sbin/snap-adm.sh status");
+    return Vagrant::backtick("sudo /sbin/snap-adm.sh status");
 }
 
 # Create some demo files
@@ -104,7 +104,7 @@ like($status, qr/_snap is snapshot of/ms, 'check no snapshots active');
 unlike($status, qr/_orig/ms, 'check no snapshots active 2');
 
 # Clean up snapshot LVs
-$rc = Vagrant::sshcmd("/sbin/snap-adm.sh cleanup");
+$rc = Vagrant::sshcmd("sudo /sbin/snap-adm.sh cleanup");
 is($rc, 0, "Results of snap-saver cleanup");
 unlike(Vagrant::backtick("/sbin/snap-adm.sh status"), qr/_snap is snapshot of /, 
     "previous, inactive snapshots still exist after cleanup");
